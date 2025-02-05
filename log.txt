@@ -1,0 +1,6 @@
+Execution time is 32 seconds.
+Calculation time while using ASSEMBLY is 1000000000.000000000 nano seconds.
+Execution time is 1 seconds.
+Calculation time while using ASSEMBLY is 0.000000000 nano seconds.
+Execution time is 3 seconds.
+Calculation time while using ASSEMBLY is 1000000000.000000000 nano seconds.
