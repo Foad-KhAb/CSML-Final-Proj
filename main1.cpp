@@ -29,18 +29,13 @@ class Ball {
 public:
     float x, y;
     int speed_x, speed_y;
-    float speed = sqrt(pow(speed_x, 2) + pow(speed_y, 2));
+    float speed = 7; // Constant speed for Sinus/Cosinus mode
     int radius;
     float rotation = 0; // Rotation angle
     float rotation_speed = 0.03; // Rotation speed
     float curve_intensity = 0.02; // Intensity of the curve
     float angle = 0.0f; // Angle for curved movement
     GameMode mode = REGULAR; // Default mode
-    float amplitude = 50.0f; // Amplitude of the sine wave
-    float frequency = 0.01f; // Frequency of the sine wave
-    float sine_start_x = 0.0f; // Starting x position for sine wave
-    float time_for_sinus = 0.0f; // Time for Starting time of sinus
-
 
     void Draw() {
         DrawTexturePro(
@@ -78,9 +73,8 @@ public:
             case CURVE:
                 // Apply curved movement
                 angle += curve_intensity;
-                x += speed_x;
-                y += speed_y;
-                speed_y += 0.05f;
+                x += speed_x * cos(angle);
+                y += speed_y * sin(angle);
 
                 // Spinning effect
                 rotation += rotation_speed;
@@ -89,7 +83,7 @@ public:
                 // Collision with screen borders
                 if (y + radius >= GetScreenHeight() || y - radius <= 0) {
                     speed_y *= -1;
-                    y = radius; // Reverse curve direction on vertical bounce
+                    curve_intensity *= -1; // Reverse curve direction on vertical bounce
                 }
 
                 if (x + radius >= GetScreenWidth()) { // CPU scores
@@ -103,10 +97,10 @@ public:
                 break;
 
             case SINUS_COSINUS:
-                // Apply sine wave movement
-                time_for_sinus += GetFrameTime();
-                x += speed_x; // Constant horizontal speed
-                y += sinf(time_for_sinus * 2.0f) * speed_y; // Oscillate y position using sine wave
+                // Apply curved movement using sine and cosine
+                angle += curve_intensity;
+                x += speed * cos(angle);
+                y += speed * sin(angle);
 
                 // Spinning effect
                 rotation += rotation_speed;
@@ -114,7 +108,7 @@ public:
 
                 // Collision with screen borders
                 if (y + radius >= GetScreenHeight() || y - radius <= 0) {
-                    speed_x *= -1; // Reverse horizontal direction on vertical bounds
+                    curve_intensity *= -1; // Reverse curve direction on vertical bounce
                 }
 
                 if (x + radius >= GetScreenWidth()) { // CPU scores
@@ -133,23 +127,25 @@ public:
         x = GetScreenWidth() / 2;
         y = GetScreenHeight() / 2;
 
-        int speed_choice[2] = {-1, 1};
-        speed_x = speed_choice[GetRandomValue(0, 1)] * 7;
-        speed_y = speed_choice[GetRandomValue(0, 1)] * 7;
+        if (mode == REGULAR || mode == CURVE) {
+            int speed_choice[2] = {-1, 1};
+            speed_x = speed_choice[GetRandomValue(0, 1)] * 7;
+            speed_y = speed_choice[GetRandomValue(0, 1)] * 7;
+        }
 
         rotation_speed = GetRandomValue(3, 8); // Random spin speed
         curve_intensity = (GetRandomValue(-5, 5) / 100.0f); // Random curve intensity
-        angle = 0.0f; // Reset angle
-        sine_start_x = x; // Reset sine wave start position
+
+        if (mode == SINUS_COSINUS) {
+            angle = GetRandomValue(0, 360) * (PI / 180.0f); // Random starting angle in radians
+        } else {
+            angle = 0.0f; // Reset angle for other modes
+        }
     }
 
     void SetMode(GameMode newMode) {
         mode = newMode;
         ResetBall(); // Reset ball when mode changes
-    }
-
-    void StartNewSineWave() {
-        sine_start_x = x;
     }
 };
 
@@ -255,12 +251,10 @@ int main() {
         if (CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{player.x, player.y, player.width, player.height})) {
             ball.speed_x *= -1;
             ball.curve_intensity *= -1; // Reverse curve on paddle hit
-            if (ball.mode == SINUS_COSINUS) ball.StartNewSineWave(); // Restart sine wave
         }
         if (CheckCollisionCircleRec(Vector2{ball.x, ball.y}, ball.radius, Rectangle{cpu.x, cpu.y, cpu.width, cpu.height})) {
             ball.speed_x *= -1;
             ball.curve_intensity *= -1; // Reverse curve on paddle hit
-            if (ball.mode == SINUS_COSINUS) ball.StartNewSineWave(); // Restart sine wave
         }
 
         // Drawing

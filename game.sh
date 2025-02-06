@@ -13,7 +13,7 @@ nasm ASM/EA.s -felf64 -o EA.o &>/dev/null
 nasm ASM/EX.s -felf64 -o EX.o &>/dev/null
 nasm ASM/EY.s -felf64 -o EY.o &>/dev/null
 
-g++ game.cpp  R.o S.o C.o G.o SE.o SA.o EA.o EX.o EY.o -o game.out -lraylib -no-pie &>/dev/null
+g++ main.cpp R.o S.o C.o G.o SE.o SA.o EA.o EX.o EY.o -o game.out -lraylib -no-pie &>/dev/null
 
 echo "Let's play PONG!"
 
@@ -25,5 +25,3 @@ rm *.o &>/dev/null
 rm *.out &>/dev/null
 
 sleep 2
-
-clear

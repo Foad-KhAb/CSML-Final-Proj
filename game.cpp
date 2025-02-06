@@ -30,6 +30,8 @@ extern "C" float EA(float rotationAngle, float segment);
 extern "C" float EX(float positionX, float radius, float startAngle);
 extern "C" float EY(float positionY, float radius, float startAngle);
 
+
+//STRUCTURS
 enum Path
 {
     Regular,
@@ -58,6 +60,8 @@ typedef struct GameMode
     Program program;
 } GameMode;
 
+
+//SHAPE CLASS
 class Shape
 {
 protected:
@@ -68,8 +72,21 @@ protected:
 public:
     int getX();
     int getY();
-};
 
+
+    Shape(int posX, int posY) : positionX(posX), positionY(posY) {}
+
+    int getX()
+    {
+        return positionX;
+    }
+
+    int getY()
+    {
+        return positionY;
+    }
+};
+//RECTANGULARSHAPE CLASS
 class RectangularShape : public Shape
 {
 protected:
@@ -81,8 +98,26 @@ public:
     int getWidth();
     int getHeight();
     bool checkCollision(Vector2 mousePoint);
+
+    RectangularShape(int posX, int posY, int wid, int hei) : Shape(posX, posY), width(wid), height(hei) {}
+
+    int getWidth()
+    {
+        return width;
+    }
+
+    int getHeight()
+    {
+        return height;
+    }
+
+    bool checkCollision(Vector2 mousePoint)
+    {
+        return CheckCollisionPointRec(mousePoint, Rectangle{(float)positionX, (float)positionY, (float)width, (float)height});
+    }
 };
 
+// PADDLE CLASS
 class Paddle : public RectangularShape
 {
 protected:
@@ -93,22 +128,54 @@ protected:
 
     Paddle(int posX, int posY);
     void limitCheck();
-};
 
+    Paddle(int posX, int posY)
+        : RectangularShape(posX, posY - 50, 20, 100), velocityY(5), accelerationY(0)
+    {
+        padding = 5;
+        color = HUNYADI_YELLOW;
+    }
+
+    void limitCheck()
+    {
+        if (positionY < padding)
+        {
+            positionY = padding;
+        }
+        else if (positionY + height > SCREEN_HEIGHT - padding)
+        {
+            positionY = SCREEN_HEIGHT - height - padding;
+        }
+    }
+};
+// PLAYER CLASS
 class Player
 {
 private:
-    char username[20];
     int score;
 
 public:
-    Player(const char *name);
+    Player();
     void updateScore(int delta);
     int getScore();
     char *getName();
     void setName(char name[20]);
-};
 
+    Player() : score(0)
+    {
+
+    }
+    void updateScore(int delta)
+    {
+        score += delta;
+    }
+
+    int getScore()
+    {
+        return score;
+    }
+};
+//BALL CLASS
 class Ball : public Shape
 {
 private:
@@ -127,36 +194,312 @@ private:
     void path();
 
 public:
-    Ball(GameMode gM, double *cT);
-    Ball(double *cT);
-    void draw();
-    void update(Player *player1, Player *player2);
-    void update();
-    void collision(Paddle paddle);
-    void reset();
-    void choose();
-    bool conrner();
-};
+    Ball(GameMode gM, double *cT)
+        : Shape(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2), gameMode(gM), calculationTime(cT)
+    {
+        choose();
+        round = 0;
+        radius = 10;
+        color1 = STEEL_BLUE;
+        color2 = TIFFANY_BLUE;
+        color3 = SEASALT;
+        reset();
+    }
 
+    Ball(double *cT)
+        : Shape(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2), velocityX(300), velocityY(300), accelerationX(0), accelerationY(0), calculationTime(cT)
+    {
+        int random = GetRandomValue(1, 3);
+        gameMode.path = (random == 1 ? Path::Regular : random == 2 ? Path::Sin
+                                                                : Path::Curve);
+        gameMode.difficulty = Difficulty::Easy;
+        round = 0;
+        radius = 10;
+        color1 = STEEL_BLUE;
+        color2 = TIFFANY_BLUE;
+        color3 = SEASALT;
+        reset();
+    }
+
+    void draw()
+    {
+        float rotationAngle = round * 0.1f;
+
+        double temporaryTime = time(NULL);
+
+        for (int i = 0; i < 6; i++)
+        {
+            float segment;
+            float startAngle;
+            float endAngle;
+            float endX;
+            float endY;
+
+            if (gameMode.program == Program::Cpp)
+            {
+                segment = i * PI / 3;
+                startAngle = rotationAngle + segment;
+                endAngle = rotationAngle + segment + PI / 3;
+                endX = (float)positionX + radius * cos(startAngle);
+                endY = (float)positionY + radius * sin(startAngle);
+            }
+            else
+            {
+                segment = SE(i);
+                startAngle = SA(rotationAngle, segment);
+                endAngle = EA(rotationAngle, segment);
+                endX = EX(positionX, radius, startAngle);
+                endY = EY(positionY, radius, startAngle);
+            }
+
+            Vector2 start = {(float)positionX, (float)positionY};
+            Vector2 end = {endX, endY};
+
+            DrawCircleSector(
+                Vector2{(float)positionX, (float)positionY},
+                radius,
+                startAngle * RAD2DEG,
+                endAngle * RAD2DEG,
+                32,
+                (i % 2 == 0 ? color1 : color2));
+            DrawLineEx(start, end, 1.0f, color3);
+        }
+
+        *calculationTime += time(NULL) - temporaryTime;
+    }
+
+    void update(Player *player1, Player *player2)
+    {
+        path();
+
+        if (positionX - radius <= 0)
+        {
+            player2->updateScore(1);
+            reset();
+        }
+        else if (positionX + radius >= SCREEN_WIDTH)
+        {
+            player1->updateScore(1);
+            reset();
+        }
+        if (positionY - radius <= 0)
+        {
+            positionY = radius;
+            velocityY *= -1;
+        }
+        else if (positionY + radius >= SCREEN_HEIGHT)
+        {
+            positionY = SCREEN_HEIGHT - radius;
+            velocityY *= -1;
+        }
+
+        if (conrner())
+        {
+            reset();
+            choose();
+        }
+    }
+
+    void update()
+    {
+        path();
+
+        if (positionX - radius <= 0)
+        {
+            positionX = radius;
+            velocityX *= -1;
+        }
+        else if (positionX + radius >= SCREEN_WIDTH)
+        {
+            positionX = SCREEN_WIDTH - radius;
+            velocityX *= -1;
+        }
+        if (positionY - radius <= 0)
+        {
+            positionY = radius;
+            velocityY *= -1;
+        }
+        else if (positionY + radius >= SCREEN_HEIGHT)
+        {
+            positionY = SCREEN_HEIGHT - radius;
+            velocityY *= -1;
+        }
+
+        if (conrner())
+        {
+            reset();
+            choose();
+        }
+    }
+
+    void path()
+    {
+        double temporaryTime = time(NULL);
+        velocityX += accelerationX / FPS;
+        velocityY += accelerationY / FPS;
+
+        float deltaX;
+        float deltaY;
+
+        switch (gameMode.path)
+        {
+        case Path::Regular:
+            deltaX = regularPath(velocityX, &gameMode);
+            deltaY = regularPath(velocityY, &gameMode);
+            break;
+
+        case Path::Sin:
+            deltaX = regularPath(velocityX, &gameMode);
+            deltaY = sinPath(velocityY, round, &gameMode);
+            break;
+
+        case Path::Curve:
+            accelerationY += curvePath(positionX, positionY, &gameMode);
+            deltaX = regularPath(velocityX, &gameMode);
+            deltaY = regularPath(velocityY, &gameMode);
+            break;
+
+        default:
+            break;
+        }
+
+        positionX += deltaX;
+        positionY += deltaY;
+        round++;
+
+        *calculationTime += time(NULL) - temporaryTime;
+    }
+
+    void collision(Paddle paddle)
+    {
+        if (CheckCollisionCircleRec(Vector2{(float)positionX, (float)positionY},
+                                    radius,
+                                    Rectangle{(float)paddle.getX(), (float)paddle.getY(), (float)paddle.getWidth(), (float)paddle.getHeight()}))
+        {
+            velocityX *= -1;
+        }
+    }
+
+    void reset()
+    {
+        positionX = SCREEN_WIDTH / 2;
+        positionY = SCREEN_HEIGHT / 2;
+    }
+
+    void choose()
+    {
+        switch (gameMode.difficulty)
+        {
+        case Difficulty::Easy:
+            velocityX = 300;
+            velocityY = 300;
+            accelerationX = 20;
+            accelerationY = 20;
+            break;
+        case Difficulty::Meduim:
+            velocityX = 350;
+            velocityY = 350;
+            accelerationX = 30;
+            accelerationY = 30;
+            break;
+        case Difficulty::Hard:
+            velocityX = 400;
+            velocityY = 400;
+            accelerationX = 40;
+            accelerationY = 40;
+            break;
+        default:
+            break;
+        }
+
+        int random[2] = {-1, 1};
+        velocityX *= random[GetRandomValue(0, 1)];
+        velocityY *= random[GetRandomValue(0, 1)];
+    }
+
+    bool conrner()
+    {
+        return (positionX - radius <= 0 || positionX + radius >= SCREEN_WIDTH) &&
+            (positionY - radius <= 0 || positionY + radius >= SCREEN_HEIGHT);
+    }
+
+};
+//CLASS RUGHT PADDLE
 class RightPaddle : public Paddle
 {
 private:
     bool isAI;
 
 public:
-    RightPaddle(int posX, int posY, bool AI);
-    void draw();
-    void update(Ball ball);
-};
 
+    RightPaddle(int posX, int posY, bool AI)
+        : Paddle(posX, posY), isAI(AI)
+    {
+        positionX -= padding;
+        positionX -= width;
+    }
+
+    void draw()
+    {
+        DrawRectangleRounded(Rectangle{(float)positionX, (float)positionY, (float)width, (float)height}, 0.8, 0, color);
+    }
+
+    void update(Ball ball)
+    {
+        if (isAI && ball.getX() > SCREEN_WIDTH / 2)
+        {
+            if (positionY + height / 2 > ball.getY())
+            {
+                positionY -= velocityY;
+            }
+            else if (positionY + height / 2 < ball.getY())
+            {
+                positionY += velocityY;
+            }
+        }
+        else
+        {
+            if (IsKeyDown(KEY_UP))
+            {
+                positionY -= velocityY;
+            }
+            else if (IsKeyDown(KEY_DOWN))
+            {
+                positionY += velocityY;
+            }
+        }
+        limitCheck();
+    }
+};
+//CLASS LEFT PADDLE
 class LeftPaddle : public Paddle
 {
 public:
-    LeftPaddle(int posX, int posY);
-    void draw();
-    void update();
-};
+    LeftPaddle(int posX, int posY)
+        : Paddle(posX, posY)
+    {
+        positionX += padding;
+    }
 
+    void draw()
+    {
+        DrawRectangleRounded(Rectangle{(float)positionX, (float)positionY, (float)width, (float)height}, 0.8, 0, color);
+    }
+
+    void update()
+    {
+        if (IsKeyDown(KEY_W))
+        {
+            positionY -= velocityY;
+        }
+        else if (IsKeyDown(KEY_S))
+        {
+            positionY += velocityY;
+        }
+        limitCheck();
+    }
+};
+//CLASS CLICKABLE
 class Clickable
 {
 protected:
@@ -166,11 +509,24 @@ protected:
     Clickable(Color foc, Color nor);
 
 public:
-    void toggleFocus();
-    void setFocus(bool status);
-    bool getFocus();
-};
+    Clickable(Color foc, Color nor) : isFocus(false), focus(foc), normal(nor) {}
 
+    void toggleFocus()
+    {
+        isFocus = !isFocus;
+    }
+
+    void setFocus(bool status)
+    {
+        isFocus = status;
+    }
+
+    bool getFocus()
+    {
+        return isFocus;
+    }
+};
+//CLASS TEXT BOX
 class TextBox : public RectangularShape, public Clickable
 {
 private:
@@ -182,14 +538,69 @@ private:
     bool isPassword;
 
 public:
-    TextBox(int posX, int posY, const char *titleName, bool passwordStatus = false);
-    void addChar(int key);
-    void deleteChar();
-    char *getText();
-    int getLength();
-    void draw();
-};
 
+    TextBox(int posX, int posY, const char *titleName, bool passwordStatus)
+        : RectangularShape(posX, posY, 200, 30),
+        Clickable(STEEL_BLUE, PALE_AZURE),
+        fill(SEASALT), textColor(TIFFANY_BLUE), length(0), isPassword(passwordStatus)
+    {
+        strcpy(title, titleName);
+        text[0] = '\0';
+    }
+
+    void addChar(int key)
+    {
+        if (isFocus && length < 99)
+        {
+            text[length] = (char)key;
+            length++;
+            text[length] = '\0';
+        }
+    }
+
+    void deleteChar()
+    {
+        if (isFocus && length > 0)
+        {
+            length--;
+            text[length] = '\0';
+        }
+    }
+
+    char *getText()
+    {
+        char *textCopy = (char *)malloc(100 * sizeof(char));
+        strcpy(textCopy, text);
+        return textCopy;
+    }
+
+    int getLength()
+    {
+        return length;
+    }
+
+    void draw()
+    {
+        DrawText(title, positionX - MeasureText(title, 20) / 2, positionY - 25, 20, textColor);
+        DrawRectangleRec(Rectangle{(float)positionX - width / 2, (float)positionY, (float)width, (float)height}, fill);
+        DrawRectangleLines(positionX - width / 2, positionY, width, height, isFocus ? focus : normal);
+        if (isPassword)
+        {
+            char hiddenPassword[100] = "";
+            for (int i = 0; i < length; i++)
+                hiddenPassword[i] = '*';
+            hiddenPassword[length] = '\0';
+            DrawText(hiddenPassword, positionX - MeasureText(hiddenPassword, 20) / 2, positionY + 5, 20, textColor);
+        }
+        else
+        {
+            DrawText(text, positionX - MeasureText(text, 20) / 2, positionY + 5, 20, textColor);
+        }
+    }
+
+
+};
+//CLASS BUTTON
 class Button : public RectangularShape, public Clickable
 {
 private:
@@ -198,10 +609,22 @@ private:
     Color textColor;
 
 public:
-    Button(int posX, int posY, const char *titleName);
-    void draw();
-};
+    Button(int posX, int posY, const char *titleName)
+        : RectangularShape(posX, posY, 100, 30),
+        Clickable(STEEL_BLUE, PALE_AZURE),
+        fill(HUNYADI_YELLOW), textColor(TIFFANY_BLUE)
+    {
+        strcpy(title, titleName);
+    }
 
+    void draw()
+    {
+        DrawRectangleRec(Rectangle{(float)positionX - width / 2, (float)positionY, (float)width, (float)height}, fill);
+        DrawRectangleLines(positionX - width / 2, positionY, width, height, isFocus ? focus : normal);
+        DrawText(title, positionX - MeasureText(title, 20) / 2, positionY + 5, 20, textColor);
+    }
+};
+//CLASS TEXT
 class Text : public Shape
 {
 private:
@@ -209,11 +632,25 @@ private:
     Color color;
 
 public:
-    Text(const char *txt, Color col, int posX, int posY);
-    void draw();
-    void updateText(char *txt);
+    Text(const char *txt, Color col, int posX, int posY) : Shape(posX, posY), color(col)
+    {
+        strncpy(text, txt, sizeof(text) - 1);
+        text[sizeof(text) - 1] = '\0';
+    }
+
+    void draw()
+    {
+        DrawText(text, positionX - MeasureText(text, 20) / 2, positionY, 20, color);
+    }
+
+    void updateText(char *txt)
+    {
+        strncpy(text, txt, sizeof(text) - 1);
+        text[sizeof(text) - 1] = '\0';
+    }
 };
 
+//CLASS CHECKBOX
 class CheckBox : public RectangularShape, public Clickable
 {
 private:
@@ -224,11 +661,38 @@ private:
     bool isChecked;
 
 public:
-    CheckBox(int posX, int posY, const char *titleName);
-    void draw();
-    void toggleCheck();
-    void setCheck(bool status);
-    bool getCheck();
+    CheckBox(int posX, int posY, const char *titleName)
+        : RectangularShape(posX, posY, 30, 30),
+        Clickable(STEEL_BLUE, PALE_AZURE),
+        unChecked(ASH_GRAY),
+        checked(PANTONE),
+        textColor(TIFFANY_BLUE),
+        isChecked(false)
+    {
+        strcpy(title, titleName);
+    }
+
+    void draw()
+    {
+        DrawRectangleRec(Rectangle{(float)positionX - width / 2, (float)positionY, (float)width, (float)height}, isChecked ? checked : unChecked);
+        DrawRectangleLines(positionX - width / 2, positionY, width, height, isFocus ? focus : normal);
+        DrawText(title, positionX + width + 5, positionY + 5, 20, textColor);
+    }
+
+    void toggleCheck()
+    {
+        isChecked = !isChecked;
+    }
+
+    void setCheck(bool status)
+    {
+        isChecked = status;
+    }
+
+    bool getCheck()
+    {
+        return isChecked;
+    }
 };
 
 bool checkLogin(TextBox *username, TextBox *password, Button *login);
@@ -243,625 +707,7 @@ float regularPath(int velocity, GameMode *gameMode);
 float sinPath(int velocity, int time, GameMode *gameMode);
 float curvePath(int positionX, int positionY, GameMode *gameMode);
 void drawLine(GameMode *gameMode, double *calculationTime);
-
-Shape::Shape(int posX, int posY) : positionX(posX), positionY(posY) {}
-
-int Shape::getX()
-{
-    return positionX;
-}
-
-int Shape::getY()
-{
-    return positionY;
-}
-
-RectangularShape::RectangularShape(int posX, int posY, int wid, int hei) : Shape(posX, posY), width(wid), height(hei) {}
-
-int RectangularShape::getWidth()
-{
-    return width;
-}
-
-int RectangularShape::getHeight()
-{
-    return height;
-}
-
-bool RectangularShape::checkCollision(Vector2 mousePoint)
-{
-    return CheckCollisionPointRec(mousePoint, Rectangle{(float)positionX, (float)positionY, (float)width, (float)height});
-}
-
-Ball::Ball(GameMode gM, double *cT)
-    : Shape(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2), gameMode(gM), calculationTime(cT)
-{
-    choose();
-    round = 0;
-    radius = 10;
-    color1 = STEEL_BLUE;
-    color2 = TIFFANY_BLUE;
-    color3 = SEASALT;
-    reset();
-}
-
-Ball::Ball(double *cT)
-    : Shape(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2), velocityX(300), velocityY(300), accelerationX(0), accelerationY(0), calculationTime(cT)
-{
-    int random = GetRandomValue(1, 3);
-    gameMode.path = (random == 1 ? Path::Regular : random == 2 ? Path::Sin
-                                                               : Path::Curve);
-    gameMode.difficulty = Difficulty::Easy;
-    round = 0;
-    radius = 10;
-    color1 = STEEL_BLUE;
-    color2 = TIFFANY_BLUE;
-    color3 = SEASALT;
-    reset();
-}
-
-void Ball::draw()
-{
-    float rotationAngle = round * 0.1f;
-
-    double temporaryTime = time(NULL);
-
-    for (int i = 0; i < 6; i++)
-    {
-        float segment;
-        float startAngle;
-        float endAngle;
-        float endX;
-        float endY;
-
-        if (gameMode.program == Program::Cpp)
-        {
-            segment = i * PI / 3;
-            startAngle = rotationAngle + segment;
-            endAngle = rotationAngle + segment + PI / 3;
-            endX = (float)positionX + radius * cos(startAngle);
-            endY = (float)positionY + radius * sin(startAngle);
-        }
-        else
-        {
-            segment = SE(i);
-            startAngle = SA(rotationAngle, segment);
-            endAngle = EA(rotationAngle, segment);
-            endX = EX(positionX, radius, startAngle);
-            endY = EY(positionY, radius, startAngle);
-        }
-
-        Vector2 start = {(float)positionX, (float)positionY};
-        Vector2 end = {endX, endY};
-
-        DrawCircleSector(
-            Vector2{(float)positionX, (float)positionY},
-            radius,
-            startAngle * RAD2DEG,
-            endAngle * RAD2DEG,
-            32,
-            (i % 2 == 0 ? color1 : color2));
-        DrawLineEx(start, end, 1.0f, color3);
-    }
-
-    *calculationTime += time(NULL) - temporaryTime;
-}
-
-void Ball::update(Player *player1, Player *player2)
-{
-    path();
-
-    if (positionX - radius <= 0)
-    {
-        player2->updateScore(1);
-        reset();
-    }
-    else if (positionX + radius >= SCREEN_WIDTH)
-    {
-        player1->updateScore(1);
-        reset();
-    }
-    if (positionY - radius <= 0)
-    {
-        positionY = radius;
-        velocityY *= -1;
-    }
-    else if (positionY + radius >= SCREEN_HEIGHT)
-    {
-        positionY = SCREEN_HEIGHT - radius;
-        velocityY *= -1;
-    }
-
-    if (conrner())
-    {
-        reset();
-        choose();
-    }
-}
-
-void Ball::update()
-{
-    path();
-
-    if (positionX - radius <= 0)
-    {
-        positionX = radius;
-        velocityX *= -1;
-    }
-    else if (positionX + radius >= SCREEN_WIDTH)
-    {
-        positionX = SCREEN_WIDTH - radius;
-        velocityX *= -1;
-    }
-    if (positionY - radius <= 0)
-    {
-        positionY = radius;
-        velocityY *= -1;
-    }
-    else if (positionY + radius >= SCREEN_HEIGHT)
-    {
-        positionY = SCREEN_HEIGHT - radius;
-        velocityY *= -1;
-    }
-
-    if (conrner())
-    {
-        reset();
-        choose();
-    }
-}
-
-void Ball::path()
-{
-    double temporaryTime = time(NULL);
-    velocityX += accelerationX / FPS;
-    velocityY += accelerationY / FPS;
-
-    float deltaX;
-    float deltaY;
-
-    switch (gameMode.path)
-    {
-    case Path::Regular:
-        deltaX = regularPath(velocityX, &gameMode);
-        deltaY = regularPath(velocityY, &gameMode);
-        break;
-
-    case Path::Sin:
-        deltaX = regularPath(velocityX, &gameMode);
-        deltaY = sinPath(velocityY, round, &gameMode);
-        break;
-
-    case Path::Curve:
-        accelerationY += curvePath(positionX, positionY, &gameMode);
-        deltaX = regularPath(velocityX, &gameMode);
-        deltaY = regularPath(velocityY, &gameMode);
-        break;
-
-    default:
-        break;
-    }
-
-    positionX += deltaX;
-    positionY += deltaY;
-    round++;
-
-    *calculationTime += time(NULL) - temporaryTime;
-}
-
-void Ball::collision(Paddle paddle)
-{
-    if (CheckCollisionCircleRec(Vector2{(float)positionX, (float)positionY},
-                                radius,
-                                Rectangle{(float)paddle.getX(), (float)paddle.getY(), (float)paddle.getWidth(), (float)paddle.getHeight()}))
-    {
-        velocityX *= -1;
-    }
-}
-
-void Ball::reset()
-{
-    positionX = SCREEN_WIDTH / 2;
-    positionY = SCREEN_HEIGHT / 2;
-}
-
-void Ball::choose()
-{
-    switch (gameMode.difficulty)
-    {
-    case Difficulty::Easy:
-        velocityX = 300;
-        velocityY = 300;
-        accelerationX = 20;
-        accelerationY = 20;
-        break;
-    case Difficulty::Meduim:
-        velocityX = 350;
-        velocityY = 350;
-        accelerationX = 30;
-        accelerationY = 30;
-        break;
-    case Difficulty::Hard:
-        velocityX = 400;
-        velocityY = 400;
-        accelerationX = 40;
-        accelerationY = 40;
-        break;
-    default:
-        break;
-    }
-
-    int random[2] = {-1, 1};
-    velocityX *= random[GetRandomValue(0, 1)];
-    velocityY *= random[GetRandomValue(0, 1)];
-}
-
-bool Ball::conrner()
-{
-    return (positionX - radius <= 0 || positionX + radius >= SCREEN_WIDTH) &&
-           (positionY - radius <= 0 || positionY + radius >= SCREEN_HEIGHT);
-}
-
-Paddle::Paddle(int posX, int posY)
-    : RectangularShape(posX, posY - 50, 20, 100), velocityY(5), accelerationY(0)
-{
-    padding = 5;
-    color = HUNYADI_YELLOW;
-}
-
-void Paddle::limitCheck()
-{
-    if (positionY < padding)
-    {
-        positionY = padding;
-    }
-    else if (positionY + height > SCREEN_HEIGHT - padding)
-    {
-        positionY = SCREEN_HEIGHT - height - padding;
-    }
-}
-
-RightPaddle::RightPaddle(int posX, int posY, bool AI)
-    : Paddle(posX, posY), isAI(AI)
-{
-    positionX -= padding;
-    positionX -= width;
-}
-
-void RightPaddle::draw()
-{
-    DrawRectangleRounded(Rectangle{(float)positionX, (float)positionY, (float)width, (float)height}, 0.8, 0, color);
-}
-
-void RightPaddle::update(Ball ball)
-{
-    if (isAI && ball.getX() > SCREEN_WIDTH / 2)
-    {
-        if (positionY + height / 2 > ball.getY())
-        {
-            positionY -= velocityY;
-        }
-        else if (positionY + height / 2 < ball.getY())
-        {
-            positionY += velocityY;
-        }
-    }
-    else
-    {
-        if (IsKeyDown(KEY_UP))
-        {
-            positionY -= velocityY;
-        }
-        else if (IsKeyDown(KEY_DOWN))
-        {
-            positionY += velocityY;
-        }
-    }
-    limitCheck();
-}
-
-LeftPaddle::LeftPaddle(int posX, int posY)
-    : Paddle(posX, posY)
-{
-    positionX += padding;
-}
-
-void LeftPaddle::draw()
-{
-    DrawRectangleRounded(Rectangle{(float)positionX, (float)positionY, (float)width, (float)height}, 0.8, 0, color);
-}
-
-void LeftPaddle::update()
-{
-    if (IsKeyDown(KEY_W))
-    {
-        positionY -= velocityY;
-    }
-    else if (IsKeyDown(KEY_S))
-    {
-        positionY += velocityY;
-    }
-    limitCheck();
-}
-
-Player::Player(const char *name) : score(0)
-{
-    strncpy(username, name, sizeof(username) - 1);
-    username[sizeof(username) - 1] = '\0';
-}
-
-void Player::updateScore(int delta)
-{
-    score += delta;
-}
-
-int Player::getScore()
-{
-    return score;
-}
-
-char *Player::getName()
-{
-    return username;
-}
-
-void Player::setName(char name[20])
-{
-    strcpy(username, name);
-}
-
-Clickable::Clickable(Color foc, Color nor) : isFocus(false), focus(foc), normal(nor) {}
-
-void Clickable::toggleFocus()
-{
-    isFocus = !isFocus;
-}
-
-void Clickable::setFocus(bool status)
-{
-    isFocus = status;
-}
-
-bool Clickable::getFocus()
-{
-    return isFocus;
-}
-
-TextBox::TextBox(int posX, int posY, const char *titleName, bool passwordStatus)
-    : RectangularShape(posX, posY, 200, 30),
-      Clickable(STEEL_BLUE, PALE_AZURE),
-      fill(SEASALT), textColor(TIFFANY_BLUE), length(0), isPassword(passwordStatus)
-{
-    strcpy(title, titleName);
-    text[0] = '\0';
-}
-
-void TextBox::addChar(int key)
-{
-    if (isFocus && length < 99)
-    {
-        text[length] = (char)key;
-        length++;
-        text[length] = '\0';
-    }
-}
-
-void TextBox::deleteChar()
-{
-    if (isFocus && length > 0)
-    {
-        length--;
-        text[length] = '\0';
-    }
-}
-
-char *TextBox::getText()
-{
-    char *textCopy = (char *)malloc(100 * sizeof(char));
-    strcpy(textCopy, text);
-    return textCopy;
-}
-
-int TextBox::getLength()
-{
-    return length;
-}
-
-void TextBox::draw()
-{
-    DrawText(title, positionX - MeasureText(title, 20) / 2, positionY - 25, 20, textColor);
-    DrawRectangleRec(Rectangle{(float)positionX - width / 2, (float)positionY, (float)width, (float)height}, fill);
-    DrawRectangleLines(positionX - width / 2, positionY, width, height, isFocus ? focus : normal);
-    if (isPassword)
-    {
-        char hiddenPassword[100] = "";
-        for (int i = 0; i < length; i++)
-            hiddenPassword[i] = '*';
-        hiddenPassword[length] = '\0';
-        DrawText(hiddenPassword, positionX - MeasureText(hiddenPassword, 20) / 2, positionY + 5, 20, textColor);
-    }
-    else
-    {
-        DrawText(text, positionX - MeasureText(text, 20) / 2, positionY + 5, 20, textColor);
-    }
-}
-
-Button::Button(int posX, int posY, const char *titleName)
-    : RectangularShape(posX, posY, 100, 30),
-      Clickable(STEEL_BLUE, PALE_AZURE),
-      fill(HUNYADI_YELLOW), textColor(TIFFANY_BLUE)
-{
-    strcpy(title, titleName);
-}
-
-void Button::draw()
-{
-    DrawRectangleRec(Rectangle{(float)positionX - width / 2, (float)positionY, (float)width, (float)height}, fill);
-    DrawRectangleLines(positionX - width / 2, positionY, width, height, isFocus ? focus : normal);
-    DrawText(title, positionX - MeasureText(title, 20) / 2, positionY + 5, 20, textColor);
-}
-
-Text::Text(const char *txt, Color col, int posX, int posY) : Shape(posX, posY), color(col)
-{
-    strncpy(text, txt, sizeof(text) - 1);
-    text[sizeof(text) - 1] = '\0';
-}
-
-void Text::draw()
-{
-    DrawText(text, positionX - MeasureText(text, 20) / 2, positionY, 20, color);
-}
-
-void Text::updateText(char *txt)
-{
-    strncpy(text, txt, sizeof(text) - 1);
-    text[sizeof(text) - 1] = '\0';
-}
-
-CheckBox::CheckBox(int posX, int posY, const char *titleName)
-    : RectangularShape(posX, posY, 30, 30),
-      Clickable(STEEL_BLUE, PALE_AZURE),
-      unChecked(ASH_GRAY),
-      checked(PANTONE),
-      textColor(TIFFANY_BLUE),
-      isChecked(false)
-{
-    strcpy(title, titleName);
-}
-
-void CheckBox::draw()
-{
-    DrawRectangleRec(Rectangle{(float)positionX - width / 2, (float)positionY, (float)width, (float)height}, isChecked ? checked : unChecked);
-    DrawRectangleLines(positionX - width / 2, positionY, width, height, isFocus ? focus : normal);
-    DrawText(title, positionX + width + 5, positionY + 5, 20, textColor);
-}
-
-void CheckBox::toggleCheck()
-{
-    isChecked = !isChecked;
-}
-
-void CheckBox::setCheck(bool status)
-{
-    isChecked = status;
-}
-
-bool CheckBox::getCheck()
-{
-    return isChecked;
-}
-bool checkLogin(TextBox *username, TextBox *password, Button *login)
-{
-    if (username->getLength() != 0 && password->getLength() != 0)
-    {
-        return true;
-    }
-    else
-    {
-        username->setFocus(true);
-        password->setFocus(false);
-        login->setFocus(false);
-        return false;
-    }
-}
-
-bool loginMenu(Player *player, double *calculationTime)
-{
-    Text title("LOGIN MENU", PANTONE, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 200);
-    TextBox username(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 100, "USERNAME");
-    TextBox password(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, "PASSWORD", true);
-    Button login(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 100, "Login");
-    username.setFocus(true);
-    password.setFocus(false);
-    login.setFocus(false);
-
-    bool loginStatus = false;
-
-    Ball ball1(calculationTime);
-    Ball ball2(calculationTime);
-
-    while (!WindowShouldClose() && !loginStatus)
-    {
-        int key = GetCharPressed();
-        while (key > 0)
-        {
-            username.addChar(key);
-            password.addChar(key);
-            key = GetCharPressed();
-        }
-
-        if (IsKeyPressed(KEY_BACKSPACE))
-        {
-            username.deleteChar();
-            password.deleteChar();
-        }
-
-        if (IsKeyPressed(KEY_TAB))
-        {
-            if (username.getFocus())
-            {
-                username.setFocus(false);
-                password.setFocus(true);
-            }
-            else if (password.getFocus())
-            {
-                password.setFocus(false);
-                login.setFocus(true);
-            }
-            else if (login.getFocus())
-            {
-                login.setFocus(false);
-                username.setFocus(true);
-            }
-        }
-        if (IsKeyPressed(KEY_ENTER))
-        {
-            if (username.getFocus())
-            {
-                username.toggleFocus();
-                password.toggleFocus();
-            }
-            else
-            {
-                loginStatus = checkLogin(&username, &password, &login);
-            }
-        }
-
-        Vector2 mousePoint = GetMousePosition();
-        if (login.checkCollision(mousePoint) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-        {
-            loginStatus = checkLogin(&username, &password, &login);
-        }
-        else if (username.checkCollision(mousePoint) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-        {
-            username.setFocus(true);
-            password.setFocus(false);
-        }
-        else if (password.checkCollision(mousePoint) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-        {
-            username.setFocus(false);
-            password.setFocus(true);
-        }
-
-        BeginDrawing();
-        ClearBackground(ASH_GRAY);
-        ball1.update();
-        ball1.draw();
-        ball2.update();
-        ball2.draw();
-
-        title.draw();
-        username.draw();
-        password.draw();
-        login.draw();
-
-        EndDrawing();
-    }
-
-    player->setName(username.getText());
-    return loginStatus;
-}
-
+//FUNCTIONS TO USE AND SET SETTINGS
 bool checkMainMenuSelections(CheckBox *singlePlayer, CheckBox *multiPlayer,
                              CheckBox *regular, CheckBox *sin, CheckBox *curve,
                              CheckBox *easy, CheckBox *medium, CheckBox *hard,
@@ -1401,11 +1247,10 @@ int main()
         .difficulty = Difficulty::Easy,
         .program = Program::Assembly};
 
-    Player player1("Player1");
-    Player player2("AI");
+    Player player1;
+    Player player2;
 
-    bool start = false;
-    start = mainMenu(&gameMode);
+    mainMenu(&gameMode);
 
     game(&player1, &player2, &gameMode, &calculationTime);
 
